@@ -1,0 +1,715 @@
+---
+title: "AdditionalWork"
+format: html
+---
+
+
+```{r}
+#| label: load-packages
+#| include: false
+
+library(mosaic)
+library(tidyverse)
+library(leaflet)
+library(sf)
+library(rpart)
+library(rpart.plot)
+library(rsample)
+library(caret)
+library(lmtest)
+
+library(gridExtra)
+library(grid)
+library(ggplotify)
+library(ggbreak) 
+library(ggspatial)
+
+library(tmap)
+
+```
+
+```{r}
+#| include: true
+# Can be included with the introduction
+
+kchouse <- read.csv("https://awagaman.people.amherst.edu/stat495/kc_house_data.csv",
+                    header = T)
+
+kchouse1 <- kchouse |>
+  mutate(fivehund = ifelse(price > 500000, 1, 0)) |>
+  filter(bedrooms < 33)
+
+kchouse1$fivehund = as.factor(kchouse1$fivehund)
+
+ggplot(data = kchouse1, aes(x = price)) +
+  geom_histogram()
+
+ggplot(data = kchouse1, aes(x = fivehund)) +
+  geom_bar()
+
+```
+
+```{r}
+kchouse2 <- kchouse1 |>
+  select(-id, -date, -price)
+
+cols <- c("waterfront", "condition", "grade", "zipcode")
+
+kchouse2[cols] <- lapply(kchouse2[cols], factor)
+
+```
+
+```{r}
+
+quant <-  kchouse2 |>
+  select(-condition, -grade, -waterfront, -zipcode) |>
+  mutate(renov = ifelse(yr_renovated == 0, 0, 1))
+
+quant <- as.data.frame(lapply(quant, as.numeric))
+
+# need to change 2 to 1 and 1 to 0 for fivehund
+quant <- quant |>
+  mutate(fivehund = ifelse(fivehund == 2, 1, 0))
+
+quant$renov = as.factor(quant$renov)
+quant$fivehund = as.factor(quant$fivehund)
+
+
+```
+
+```{r}
+ggplot(gather(quant, key, value, 
+              -fivehund, -yr_renovated, -renov, -yr_built, -lat, -long), 
+       aes(x = value, y = fivehund)) + 
+  geom_boxplot() +
+  facet_wrap(~ key, scales="free_x", ncol=5) +
+  labs(title = "Quantitivate Variables")
+
+ggplot(gather(quant, key, value, 
+              -fivehund, -yr_renovated, -renov, -yr_built, -lat, -long), 
+       aes(x = value, y = fivehund)) + 
+  geom_point(alpha = 0.1) +
+  facet_wrap(~ key, scales="free_x", ncol=5) +
+  labs(title = "Quantitivate Variables")
+```
+
+```{r}
+
+categvar <- kchouse2 |>
+  select(fivehund, condition, floors, grade, view, waterfront, zipcode) |>
+  mutate(grade = factor(grade, levels = c("3", "4", "5", "6", "7", 
+                                          "8", "9", "10","11","12", "13")),
+         view = factor(view, levels = c("0", "1", "2", "3", "4")))  
+
+categvar_fixed <- as.data.frame(lapply(categvar, as.factor)) |>
+  pivot_longer(cols = 2:7, names_to = "key", values_to = "value") 
+
+ggplot(categvar_fixed, 
+       aes(x = value, fill = fivehund)) + 
+  geom_bar() +
+  facet_wrap(~ key, scales="free", ncol=2)
+  
+ggplot(categvar_fixed, 
+       aes(x = value, fill = fivehund)) + 
+  geom_bar(position = "fill") +
+  facet_wrap(~ key, scales="free", ncol=2)
+
+```
+
+```{r, fig.width=8, fig.height=4}
+
+
+bedbath <- as.data.frame(lapply(kchouse2, as.factor)) |>
+  select(fivehund, bedrooms, bathrooms) |>
+  mutate(bathrooms = factor(bathrooms, levels = c("0.5", "0.75", 
+                                              "1", "1.25", "1.5", "1.75", "2", 
+                                              "2.25", "2.5", "2.75", "3", 
+                                              "3.25", "3.5", "3.75", "4", 
+                                              "4.25", "4.5", "4.75", "5", "5.25", 
+                                              "5.5", "5.75", "6", "6.25", 
+                                              "6.5", "6.75", "7.5", 
+                                              "7.75", "8")))
+
+
+bedbath_pivot <- bedbath |>
+  pivot_longer(cols = 2:3, names_to = "key", values_to = "value")
+
+
+ggplot(bedbath_pivot, 
+       aes(y = value, fill = fivehund)) + 
+  geom_bar() +
+  facet_wrap(~ key, scales="free")
+
+ggplot(bedbath_pivot, 
+       aes(y = value, fill = fivehund)) + 
+  geom_bar(position = "fill") +
+  facet_wrap(~ key, scales="free")
+
+```
+
+```{r}
+ggplot(data = categvar, aes(x = zipcode, fill = fivehund)) +
+  geom_bar(position = "fill") + 
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())  +
+  labs(fill = "Sold for >$500K",
+       x = "Different Zipcodes",
+       y = "Proportion",
+       title = "Sold for >$500K based on Zipcode",
+       subtitle = "1 = yes, 0 = no")
+        
+```
+
+```{r, fig.height=8, fig.width=6}
+
+ggplot(data = categvar, aes(y = zipcode, fill = fivehund)) +
+  geom_bar(position = "fill")
+```
+
+```{r}
+# lowest value is 1934
+
+ggplot(data = quant, aes(x = renov, fill = fivehund))  + 
+  geom_bar() 
+
+ggplot(data = quant, aes(x = renov, fill = fivehund))  + 
+  geom_bar(position = "fill") 
+
+```
+
+```{r}
+ggplot(data = quant, aes(x = yr_built, fill = fivehund))  + 
+  geom_bar() 
+
+ggplot(data = quant, aes(x = yr_built, fill = fivehund))  + 
+  geom_bar(position = "fill") 
+
+```
+
+```{r}
+
+ggplot(data = quant, aes(x = long, y = lat, 
+                         color = fivehund,
+                         fill = fivehund)) +
+  geom_tile()
+
+ggplot(data = quant, aes(x = long, y = lat, 
+                         color = fivehund)) +
+  geom_point(alpha = 0.2) +
+  scale_colour_manual(values = c("plum", "seagreen"))
+```
+
+
+
+
+```{r}
+split_data <- initial_split(kchouse2, prop = 0.8)
+train_data <- training(split_data)
+test_data <- testing(split_data)
+```
+
+```{r}
+set.seed(495)
+
+model_control <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
+
+```
+
+
+```{r}
+# reference model
+ref_model <- caret::train(
+  data = train_data, 
+  fivehund ~ ., 
+  method = "glm",
+  family = "binomial",
+  trControl = model_control
+)
+
+summary(ref_model)
+
+
+```
+
+
+```{r}
+refmodel_pred <- predict(ref_model, train_data)
+confusionMatrix(refmodel_pred, as.factor(train_data$fivehund))
+
+refmodel_testpred <- predict(ref_model, test_data)
+confusionMatrix(refmodel_testpred, as.factor(test_data$fivehund))
+
+```
+
+
+```{r}
+model1 <-  caret::train(
+  fivehund ~ sqft_living + 
+                 waterfront + view + grade + condition, 
+  data = train_data, 
+  method = "glm",
+  family = "binomial",
+  trControl = model_control
+)
+
+summary(model1)
+
+```
+
+```{r}
+
+model1_pred <- predict(model1, train_data)
+confusionMatrix(model1_pred, as.factor(train_data$fivehund))
+
+model1_testpred <- predict(model1, test_data)
+confusionMatrix(model1_testpred, as.factor(test_data$fivehund))
+
+```
+
+```{r}
+model2 <-  caret::train(
+  fivehund ~ sqft_living + 
+                 zipcode + lat, 
+  data = train_data, 
+  method = "glm",
+  family = "binomial",
+  trControl = model_control
+)
+
+summary(model2)
+
+```
+
+```{r}
+model2_pred <- predict(model2, train_data)
+confusionMatrix(model2_pred, as.factor(train_data$fivehund))
+
+model2_testpred <- predict(model2, test_data)
+confusionMatrix(model2_testpred, as.factor(test_data$fivehund))
+
+```
+
+```{r}
+model3 <-  caret::train(
+  fivehund ~ sqft_living + grade  + lat + long, 
+  data = train_data, 
+  method = "glm",
+  family = "binomial",
+  trControl = model_control
+)
+
+summary(model3)
+
+```
+
+
+```{r}
+model3_pred <- predict(model3, train_data)
+confusionMatrix(model1_pred, as.factor(train_data$fivehund))
+
+model3_testpred <- predict(model3, test_data)
+confusionMatrix(model1_testpred, as.factor(test_data$fivehund))
+
+```
+
+
+```{r}
+
+model4 <-  caret::train(
+  fivehund ~ sqft_living + floors  + lat + long, 
+  data = train_data, 
+  method = "glm",
+  family = "binomial",
+  trControl = model_control
+)
+
+summary(model4)
+
+```
+
+
+```{r}
+model4_pred <- predict(model4, train_data)
+confusionMatrix(model4_pred, as.factor(train_data$fivehund))
+
+model4_testpred <- predict(model4, test_data)
+confusionMatrix(model4_testpred, as.factor(test_data$fivehund))
+
+```
+
+
+```{r}
+model5 <-  caret::train(
+  fivehund ~ sqft_living + grade + lat, 
+  data = train_data, 
+  method = "glm",
+  family = "binomial",
+  trControl = model_control
+)
+
+summary(model5)
+
+model5_pred <- predict(model5, train_data)
+confusionMatrix(model5_pred, as.factor(train_data$fivehund))
+
+model5_testpred <- predict(model5, test_data)
+confusionMatrix(model5_testpred, as.factor(test_data$fivehund))
+```
+
+```{r}
+model6 <-  caret::train(
+  fivehund ~ sqft_living + floors  + lat,
+  data = train_data, 
+  method = "glm",
+  family = "binomial",
+  trControl = model_control
+)
+
+summary(model6)
+
+model6_pred <- predict(model6, train_data)
+confusionMatrix(model5_pred, as.factor(train_data$fivehund))
+
+model6_testpred <- predict(model6, test_data)
+confusionMatrix(model6_testpred, as.factor(test_data$fivehund))
+```
+
+
+
+ref model - rank deficit warning
+did not converge
+0.9057 train       
+0.909 test     
+
+[cv - 5, 5]
+model [sqft_living + waterfront + view + grade + condition]
+did not converge
+0.7888 train
+0.7824 test
+
+model [sqft_living15 + waterfront + view + grade + condition]
+did not converge
+0.7774   train
+0.7826   test
+
+model [sqft_living + waterfront + view + grade + condition + lat + long]
+did not converge
+0.7888 train
+0.7824 test
+
+model [sqft_living + waterfront + view  + lat + long]
+0.7985183 train
+0.8014 test
+
+model [sqft_living + view  + lat + long]
+0.797
+0.8053        
+
+model  [sqft_living + grade + lat]
+did not converge
+0.797  
+0.816           
+
+model  [sqft_living + grade  + lat + long]
+did not converge
+
+model [sqft_living + floors  + lat + long]
+0.7946          
+0.8002         
+     
+model  [sqft_above + view  + lat + long]
+0.7993          
+0.7697          
+
+model [sqft_living + floors  + lat]
+0.797          
+0.7998   
+
+model [sqft_living  + lat + long]
+0.7917  
+0.8002        
+
+
+       
+
+```{r}
+set.seed(495)
+#minbucket = 10, minsplit = 30, cp = 0.01
+house_control <- rpart.control()
+
+# should data be train_data or kchouse2?
+# create tree with tuning param
+tree1 <- rpart(data = train_data, 
+                   fivehund ~ ., 
+                   cp = 0.01, 
+                   method = "class")
+
+rpart.plot(tree1)
+```
+
+```{r}
+set.seed(495)
+
+train_tree1 <- mutate(train_data, pred = predict(tree1, type="class"))
+tally(pred ~ fivehund, data = train_tree1)
+
+tally(~ fivehund, data = train_tree1)
+
+(9095 + 6003)/(9095 + 6003 + 946 +1233)
+```
+
+```{r}
+test_tree1 <- mutate(test_data, 
+                     pred = predict(tree1, 
+                                    type="class", 
+                                    newdata = test_data)) 
+
+tally(pred ~ fivehund, data = test_tree1)
+
+tally(~ fivehund, data = test_tree1)
+
+(2287 + 1495)/(2287 + 1495 +320 +218 )
+```
+
+
+```{r}
+set.seed(495)
+
+
+# should data be train_data or kchouse2?
+# create tree with tuning param
+tree2 <- rpart(data = train_data, 
+               cp = 0.1,
+                   fivehund ~ sqft_living + 
+                 waterfront + view  + lat + long, 
+                   control = house_control, 
+                   method = "class")
+
+rpart.plot(tree2)
+
+
+train_tree2 <- mutate(train_data, pred = predict(tree2, type="class"))
+tally(pred ~ fivehund, data = train_tree2)
+
+tally(~ fivehund, data = train_tree2)
+
+(8935 + 5839)/(8935 + 5839 + 1396 + 1107)
+
+```
+
+```{r}
+set.seed(495)
+
+test_tree2 <- mutate(test_data, 
+                     pred = predict(tree2, 
+                                    type="class", 
+                                    newdata = test_data)) 
+
+tally(pred ~ fivehund, data = test_tree2)
+
+tally(~ fivehund, data = test_tree2)
+
+(2248+1475)/(2248+1475+341+256)
+```
+
+```{r}
+set.seed(495)
+
+# train
+
+# create tree with tuning param
+tree3 <- rpart(data = train_data, 
+               cp = 0,
+                   fivehund ~ sqft_above + sqft_living + 
+                 waterfront + view + grade + lat + long, 
+                   control = house_control, 
+                   method = "class") 
+
+rpart.plot(tree3, digits = 4)
+
+summary(tree3)
+
+
+train_tree3 <- mutate(train_data, pred = predict(tree3, type="class"))
+tally(pred ~ fivehund, data = train_tree3)
+
+tally(~ fivehund, data = train_tree3)
+
+```
+
+```{r}
+set.seed(495)
+
+# test
+test_tree3 <- mutate(test_data, 
+                     pred = predict(tree3, 
+                                    type="class", 
+                                    newdata = test_data)) 
+
+tally(pred ~ fivehund, data = test_tree3)
+
+tally(~ fivehund, data = test_tree3)
+
+# accuracy calculation = 0.8590278
+(2184 + 1527)/(2184 + 1527 + 331 + 278)
+```
+
+
+tree1 <- rpart(data = train_data, 
+                   fivehund ~ ., 
+                   control = house_control, 
+                   method = "class")
+
+rpart.plot(tree1)
+
+
+
+```{r}
+set.seed(495)
+
+train_tree1 <- mutate(train_data, pred = predict(tree1, type="class"))
+tally(pred ~ fivehund, data = train_tree1)
+
+tally(~ fivehund, data = train_tree1)
+
+# 0.8657097
+(9116  + 5840)/(9116  + 5840 + 1405 + 915)
+
+test_tree1 <- mutate(test_data, pred = predict(tree1, 
+                                               type="class",
+                                               newdata = test_data))
+tally(pred ~ fivehund, data = test_tree1)
+
+# 0.8689815
+(2280 + 1474) / (2280 + 1474 + 331 + 235)
+
+```
+
+
+[cv 5, 5]
+tree1 [full]
+0.8738786 train
+0.875463 test
+
+tree 2 [sqft_living + waterfront + view  + lat + long] -> selected sqft_living and lat
+cp = 0.01 and cp = 0 gives same results
+0.8551253 for training
+0.8618056 for test data performance
+
+
+not converging, coeff not stablizing enojgh (keeps chanign) epsilon parameter - if coeff doesn't change by this amount overfitting
+
+minbucket and minsplit will have to be very big - bc small % of data set is still in the thousands
+
+accuracy can be used to compare across tree and glm
+deviance for hypothesis test - full vs nested 
+aic for model assesment 
+pseudo r sq - too many types, all have drawbacks
+roc curve, auc 
+generalized vif (gvif) for correl of categorical var, especially for interacting terms
+rank deficient - linear relationship btwn bedrooms and bathrooms
+
+
+
+Not using: 
+
+```{r}
+# takes too long
+#enet_model <- train(
+#  fivehund ~ ., 
+#  data = kchouse2,
+#  method = "glm",
+#  trControl = model_control
+#)
+
+#plot(enet_model)
+
+#plot(enet_model$finalModel)
+
+#enet_model$bestTune$alpha
+#enet_model$bestTune$lambda
+
+#coef(enet_model$finalModel, s = enet_model$bestTune$lambda)
+```
+
+
+```{r}
+
+#map2 <- read_sf("District_Codes___dstcode_area/District_Codes___dstcode_area.shp")
+
+```
+
+
+```{r}
+# https://r.geocompx.org/adv-map
+
+
+#tm_shape(map2) +
+#  tm_borders() 
+
+```
+
+
+```{r}
+
+halfmillion <- kchouse |>
+  filter(price > 500000)
+
+halfmillioncoord <- halfmillion |>
+  select(lat, long)
+
+less <- kchouse |>
+  filter(price <= 500000)
+
+lesscoords <- less |>
+  select(lat, long)
+
+# reading shape file
+map <- read_sf("OFM_BAS_change_polygons/OFM_BAS_change_polygons.shp")
+
+# creating leaflet
+housemap <- leaflet(map) |>
+  # add default layer of basic map outlines
+  addTiles(group = "OSM (default)") |>
+  # add satellite layer
+  addProviderTiles(
+    providers$Esri.WorldImagery, 
+    group = "World Imagery (satellite)"
+  ) |>
+  # allow to switch between layers
+  addLayersControl(
+    # map options
+    baseGroups = c(
+      "OSM (default)",
+      "World Imagery (satellite)"
+    ),
+    overlayGroups = c(">$500K houses", "<=$500K houses"),
+
+  ) |>
+  # markers to indicate sites
+  addCircleMarkers(
+    data = halfmillion,
+    lat =~ lat, 
+    lng =~ long,
+    group = ">$500K houses",
+    color = "purple",
+    popup = ~paste0(lat, ", ", long, "</br>$", price),
+    # group markers into clusters
+    clusterOptions = markerClusterOptions()
+  ) |>
+  addCircleMarkers(
+    data = less,
+    lat =~ lat, 
+    lng =~ long,
+    group = "<=$500K houses",
+    color = "gray",
+    popup = ~paste0(lat, ", ", long, "</br>$", price),
+    # group markers into clusters
+    clusterOptions = markerClusterOptions()
+  ) 
+
+housemap
+
+
+# prop of fivehund by zipcode
+```
